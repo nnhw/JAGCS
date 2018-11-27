@@ -174,6 +174,8 @@ void MavLinkCommunicator::onDataReceived(const QByteArray& data)
     d->receivedLink = qobject_cast<AbstractLink*>(this->sender());
     if (!d->receivedLink) return;
 
+    this->sendDataAllLinks(data);
+
     mavlink_message_t message;
     mavlink_status_t status;
 

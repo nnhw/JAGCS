@@ -16,6 +16,7 @@ ColumnLayout {
     property alias port: portItem.value
     property alias user: userItem.text
     property alias password: passwordItem.text
+    property alias retranslation: retranslationBox.checked
 
     anchors.fill: parent
     spacing: controlSize.spacing
@@ -76,6 +77,14 @@ ColumnLayout {
         placeholderText: qsTr("Enter password")
         echoMode: TextInput.Password
         onEditingFinished: changed = true
+    }
+
+    Controls.CheckBox {
+        id: retranslationBox
+        text: qsTr("Data retranslation")
+        onCheckedChanged: {
+            changed = true;
+        }
     }
 
     Item { Layout.fillHeight: true }
