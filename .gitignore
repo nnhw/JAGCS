@@ -36,6 +36,9 @@ CMakeLists.txt.user
 # Android studio
 /.idea
 
+# vscode
+.vscode
+
 # Dirs
 /build*
 /result*
