@@ -39,6 +39,9 @@ CMakeLists.txt.user
 # vscode
 .vscode
 
+# db
+jagcs_db
+
 # Dirs
 /build*
 /result*
