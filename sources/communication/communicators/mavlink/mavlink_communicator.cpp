@@ -18,6 +18,8 @@ using namespace comm;
 class MavLinkCommunicator::Impl
 {
 public:
+    MavLinkCommunicator* p;
+
     quint8 systemId;
     quint8 componentId;
 
@@ -30,7 +32,44 @@ public:
 
     int oldPacketsReceived = 0;
     int oldPacketsDrops = 0;
+
+    void versionSwitcher(qint8 channel);
+    void messageProcessor(mavlink_message_t message);
+    void refreshStatistics(mavlink_status_t status);
+
 };
+
+void MavLinkCommunicator::Impl::messageProcessor(mavlink_message_t message)
+{
+    for (AbstractMavLinkHandler* handler: handlers)
+    {
+        handler->processMessage(message);
+    }
+}
+
+void MavLinkCommunicator::Impl::versionSwitcher(qint8 channel)
+{
+    // if we got MavLink v2, switch to on it!
+    mavlink_status_t* channelStatus = mavlink_get_channel_status(channel);
+    if (!(channelStatus->flags & MAVLINK_STATUS_FLAG_IN_MAVLINK1))
+    {
+        p->switchLinkProtocol(receivedLink, MavLink2);
+    }
+}
+
+void MavLinkCommunicator::Impl::refreshStatistics(mavlink_status_t status)
+{
+    if (oldPacketsReceived != status.packet_rx_success_count ||
+        oldPacketsDrops != status.packet_rx_drop_count)
+    {
+        emit p->mavLinkStatisticsChanged(receivedLink,
+                                      status.packet_rx_success_count,
+                                      status.packet_rx_drop_count);
+
+        oldPacketsReceived = status.packet_rx_success_count;
+        oldPacketsDrops = status.packet_rx_drop_count;
+    }
+}
 
 MavLinkCommunicator::MavLinkCommunicator(quint8 systemId, quint8 componentId, QObject* parent):
     AbstractCommunicator(parent),
@@ -45,6 +84,8 @@ MavLinkCommunicator::MavLinkCommunicator(quint8 systemId, quint8 componentId, QO
     {
         d->avalibleChannels.append(channel);
     }
+
+    d->p = this;
 }
 
 MavLinkCommunicator::~MavLinkCommunicator()
@@ -174,43 +215,21 @@ void MavLinkCommunicator::onDataReceived(const QByteArray& data)
     d->receivedLink = qobject_cast<AbstractLink*>(this->sender());
     if (!d->receivedLink) return;
 
-    this->sendDataAllLinks(data);
+//    this->sendDataAllLinks(data);
 
     mavlink_message_t message;
     mavlink_status_t status;
-
     quint8 channel = this->linkChannel(d->receivedLink);
     for (int pos = 0; pos < data.length(); ++pos)
     {
-        if (!mavlink_parse_char(channel, (quint8)data[pos], &message, &status)) continue;
-
+    if (!mavlink_parse_char(channel, (quint8)data[pos], &message, &status)) continue;
+    d->mavSystemLinks[message.sysid] = d->receivedLink;
 #ifdef MAVLINK_V2
-       // if we got MavLink v2, switch to on it!
-       mavlink_status_t* channelStatus = mavlink_get_channel_status(channel);
-       if (!(channelStatus->flags & MAVLINK_STATUS_FLAG_IN_MAVLINK1))
-       {
-           this->switchLinkProtocol(d->receivedLink, MavLink2);
-       }
+    d->versionSwitcher(channel);
 #endif
-
-        d->mavSystemLinks[message.sysid] = d->receivedLink;
-
-        for (AbstractMavLinkHandler* handler: d->handlers)
-        {
-            handler->processMessage(message);
-        }
+    d->messageProcessor(message);
     }
-
-    if (d->oldPacketsReceived != status.packet_rx_success_count ||
-        d->oldPacketsDrops != status.packet_rx_drop_count)
-    {
-        emit mavLinkStatisticsChanged(d->receivedLink,
-                                      status.packet_rx_success_count,
-                                      status.packet_rx_drop_count);
-
-        d->oldPacketsReceived = status.packet_rx_success_count;
-        d->oldPacketsDrops = status.packet_rx_drop_count;
-    }
+    d->refreshStatistics(status);
 }
 
 void MavLinkCommunicator::finalizeMessage(mavlink_message_t& message)
